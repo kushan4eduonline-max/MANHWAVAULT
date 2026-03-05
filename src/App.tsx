@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Home, BarChart2, List as ListIcon, Globe, Download, Plus, Minus, ExternalLink, Search, X, Image as ImageIcon, Upload, Edit2, Trash2, Check, ArrowRight, Bookmark, Filter, Sparkles } from 'lucide-react';
+import { Home, BarChart2, List as ListIcon, Globe, Download, Plus, Minus, ExternalLink, Search, X, Image as ImageIcon, Upload, Edit2, Trash2, Check, ArrowRight, Bookmark, Filter, Sparkles, Wand2 } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { Auth } from './components/Auth';
+import { GoogleGenAI } from "@google/genai";
 
 // --- Types ---
 export type TitleStatus = 'Reading' | 'Completed' | 'Planned' | 'Dropped';
@@ -270,6 +271,29 @@ function MainApp() {
       title: '', type: 'Manhwa', status: 'Reading', ch: 0, total: 0, cover: '', url: '', site: '', tags: [], ...editingTitle
     });
     const [tagInput, setTagInput] = useState('');
+    const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
+    const [loadingTags, setLoadingTags] = useState(false);
+
+    const generateTags = async () => {
+      if (!formData.title) return;
+      setLoadingTags(true);
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `Suggest 5 short, relevant tags (genres/themes) for the manhwa/manga/comic titled "${formData.title}". Return ONLY a comma-separated list of tags (e.g. Action, Fantasy, Isekai). Do not include numbering or extra text.`,
+        });
+        
+        const text = response.text || '';
+        const tags = text.split(',').map(t => t.trim()).filter(t => t.length > 0);
+        setSuggestedTags(tags.slice(0, 5));
+      } catch (e) {
+        console.error("Tag generation failed", e);
+        showToast("Failed to generate tags.");
+      } finally {
+        setLoadingTags(false);
+      }
+    };
 
     const handlePaste = (e: React.ClipboardEvent) => {
       const items = e.clipboardData.items;
@@ -377,11 +401,52 @@ function MainApp() {
                   <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Site Name</label>
                   <input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" value={formData.site || ''} onChange={e => setFormData(prev => ({ ...prev, site: e.target.value }))} />
                 </div>
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Rating (0-10)</label>
+                  <input 
+                    type="number" 
+                    min="0" 
+                    max="10" 
+                    step="0.1"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" 
+                    value={formData.rating || 0} 
+                    onChange={e => setFormData(prev => ({ ...prev, rating: parseFloat(e.target.value) || 0 }))} 
+                  />
+                </div>
               </div>
               
               {/* Tags */}
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Tags</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase block">Tags</label>
+                  <button 
+                    onClick={generateTags} 
+                    disabled={loadingTags || !formData.title}
+                    className="text-xs text-mv-primary flex items-center gap-1 hover:underline disabled:opacity-50"
+                  >
+                    <Wand2 size={12} /> {loadingTags ? 'Generating...' : 'Suggest Tags'}
+                  </button>
+                </div>
+                
+                {suggestedTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
+                    <span className="text-xs text-gray-400 w-full mb-1">Suggestions:</span>
+                    {suggestedTags.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => {
+                          if (!formData.tags?.includes(tag.toLowerCase())) {
+                            setFormData(prev => ({ ...prev, tags: [...(prev.tags || []), tag.toLowerCase()] }));
+                          }
+                        }}
+                        className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-600 hover:border-mv-primary hover:text-mv-primary transition-colors"
+                      >
+                        + {tag}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex gap-2 mb-2">
                   <input 
                     type="text" 
@@ -607,6 +672,12 @@ function MainApp() {
                 <div className="absolute inset-0 flex items-center justify-center bg-mv-primary/10 text-mv-primary font-serif font-bold text-xl -z-10">
                   {getInitials(t.title)}
                 </div>
+                {/* Rating Badge */}
+                {t.rating > 0 && (
+                  <div className="absolute top-1 left-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                    <span className="text-yellow-400">★</span> {t.rating}
+                  </div>
+                )}
               </div>
 
               {/* Info */}
@@ -893,21 +964,31 @@ function MainApp() {
     const generateRecs = async () => {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        showToast('You must be logged in to generate recommendations.');
+        setLoading(false);
+        return;
+      }
 
       try {
         const { data, error } = await supabase.functions.invoke('generate-recommendations', {
           body: { user_id: user.id }
         });
-        if (error) throw error;
+        
+        if (error) {
+          console.error('Function Error:', error);
+          throw new Error(error.message || 'Function invocation failed');
+        }
         
         // Refresh recs
-        const { data: recsData } = await supabase.from('recommendations').select('*');
+        const { data: recsData, error: fetchError } = await supabase.from('recommendations').select('*');
+        if (fetchError) throw fetchError;
+        
         if (recsData) setRecommendations(recsData as Recommendation[]);
         showToast('Recommendations generated!');
-      } catch (e) {
-        console.error(e);
-        showToast('Failed to generate recommendations.');
+      } catch (e: any) {
+        console.error('Recommendation Error:', e);
+        showToast(`Failed to generate recommendations: ${e.message || 'Unknown error'}`);
       } finally {
         setLoading(false);
       }
@@ -961,6 +1042,10 @@ function MainApp() {
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      
+      // Reset the input value so the same file can be selected again if needed
+      e.target.value = '';
+
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
@@ -970,32 +1055,64 @@ function MainApp() {
             return;
           }
 
-          const data = JSON.parse(event.target?.result as string);
-          const importedTitles = Array.isArray(data) ? data : (data.titles || []);
+          const fileContent = event.target?.result as string;
+          let data;
+          try {
+            data = JSON.parse(fileContent);
+          } catch (parseError) {
+            console.error("JSON Parse Error:", parseError);
+            showToast("Invalid JSON file format.");
+            return;
+          }
+
+          // Handle different export formats
+          let importedTitles: any[] = [];
+          if (Array.isArray(data)) {
+            importedTitles = data;
+          } else if (data.titles && Array.isArray(data.titles)) {
+            importedTitles = data.titles;
+          } else if (data.library && Array.isArray(data.library)) {
+             importedTitles = data.library;
+          } else {
+             // Try to find any array property that looks like a list of titles
+             const possibleArray = Object.values(data).find(val => Array.isArray(val) && val.length > 0 && (val[0].title || val[0].name));
+             if (possibleArray) {
+               importedTitles = possibleArray as any[];
+             }
+          }
+
+          if (importedTitles.length === 0) {
+            showToast("No titles found in the imported file.");
+            return;
+          }
           
           const toInsert: any[] = [];
           
           importedTitles.forEach((item: any) => {
-            const titleStr = item.title || item.name || '';
+            const titleStr = item.title || item.name || item.seriesTitle || '';
             if (!titleStr) return;
 
-            // Check duplicate
+            // Check duplicate in current state
             const exists = titles.find(t => t.title.toLowerCase() === titleStr.toLowerCase());
-            if (!exists) {
+            
+            // Also check if we already added it to the insert queue (handle duplicates in the file itself)
+            const alreadyInQueue = toInsert.find(t => t.title.toLowerCase() === titleStr.toLowerCase());
+
+            if (!exists && !alreadyInQueue) {
                toInsert.push({
                  user_id: user.id,
                  title: titleStr,
                  type: item.type || 'Manhwa',
                  status: item.status || 'Reading',
-                 ch: parseInt(item.ch || item.chapter || '0', 10) || 0,
-                 total: parseInt(item.total || '0', 10) || 0,
+                 ch: parseInt(item.ch || item.chapter || item.currentChapter || '0', 10) || 0,
+                 total: parseInt(item.total || item.totalChapters || '0', 10) || 0,
                  cover: item.cover || item.image || item.coverUrl || item.imageUrl || item.thumbnail || item.thumb || item.picture || '',
                  url: item.url || item.link || item.siteUrl || item.source || item.href || item.readUrl || item.lastReadUrl || '',
                  site: item.site || '',
-                 rating: item.rating || 0,
-                 tags: Array.isArray(item.tags) ? item.tags : [],
-                 fav: !!item.fav,
-                 note: item.note || '',
+                 rating: parseInt(item.rating || item.score || '0', 10) || 0,
+                 tags: Array.isArray(item.tags) ? item.tags : (typeof item.tags === 'string' ? item.tags.split(',').map((t: string) => t.trim()) : []),
+                 fav: !!(item.fav || item.favorite || item.isFavorite),
+                 note: item.note || item.comments || '',
                  updated: item.updated || Date.now()
                });
             }
@@ -1009,11 +1126,11 @@ function MainApp() {
               showToast(`Successfully imported ${data.length} new titles.`);
             }
           } else {
-            showToast('No new titles found to import.');
+            showToast('No new titles found to import (duplicates skipped).');
           }
         } catch (err) {
-          console.error(err);
-          showToast("Failed to import titles.");
+          console.error("Import Error:", err);
+          showToast("Failed to import titles. Check console for details.");
         }
       };
       reader.readAsText(file);
