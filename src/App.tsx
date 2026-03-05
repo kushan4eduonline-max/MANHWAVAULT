@@ -541,7 +541,7 @@ function MainApp() {
     const [tagFilter, setTagFilter] = useState<string | null>(null);
     const [linkInput, setLinkInput] = useState('');
 
-    const processLink = () => {
+    const processLink = async  () => {
       if (!linkInput.trim()) return;
       const parsed = parseLink(linkInput);
       
@@ -571,8 +571,18 @@ function MainApp() {
         showToast(`Updated existing title: ${existing.title} to Chapter ${newCh}`);
       } else {
         // Open modal prefilled
+                let coverImage = '';
+        try {
+          const { data: metaData } = await supabase.functions.invoke('fetch-metadata', {
+            body: { url: linkInput.trim() }
+          });
+          if (metaData?.image) coverImage = metaData.image;
+          if (metaData?.title && !parsed.title) parsed.title = metaData.title;
+        } catch (_) {}
+        // Open modal prefilled with cover
         setEditingTitle({
           title: parsed.title,
+                    cover: coverImage,
           ch: parseInt(parsed.chapter) || 0,
           url: parsed.url,
           site: parsed.siteName,
