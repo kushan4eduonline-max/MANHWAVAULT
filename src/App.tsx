@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Home, BarChart2, List as ListIcon, Globe, Download, Plus, Minus, ExternalLink, Search, X, Image as ImageIcon, Upload, Edit2, Trash2, Check, ArrowRight, Bookmark, Filter, Sparkles, Wand2 } from 'lucide-react';
+import { Home, BarChart2, List as ListIcon, Globe, Download, Plus, Minus, ExternalLink, Search, X, Image as ImageIcon, Upload, Edit2, Trash2, Check, ArrowRight, Bookmark, Filter, Sparkles, Wand2, Sun, Moon, Star } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { Auth } from './components/Auth';
 import { GoogleGenAI } from "@google/genai";
@@ -9,6 +9,7 @@ export type TitleStatus = 'Reading' | 'Completed' | 'Planned' | 'Dropped';
 
 export interface Title {
   id: string;
+  user_id?: string;
   title: string;
   type: string;
   status: TitleStatus;
@@ -59,6 +60,8 @@ export interface Recommendation {
   tags: string[];
   source_title: string;
   score: number;
+  section?: string;
+  site_url?: string;
 }
 
 // --- Hooks ---
@@ -139,6 +142,25 @@ function MainApp() {
   const [editingTitle, setEditingTitle] = useState<Partial<Title> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
+  
+  // Theme State
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('manhwa-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('theme-light', 'theme-dark');
+    root.classList.add(`theme-${theme}`);
+    localStorage.setItem('manhwa-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   
   useEffect(() => {
     if (!supabase) return;
@@ -264,7 +286,38 @@ function MainApp() {
 
   // --- Sub-components ---
 
-  const TitleEditorModal = () => {
+  const Header = () => (
+    <header className="sticky top-0 z-30 bg-header border-b border-divider px-4 py-3 flex items-center justify-between transition-colors">
+      <div className="flex items-center gap-3">
+        {/* Mobile: Show logo. Desktop: Sidebar handles nav, but we can show logo here too or just title. */}
+        {/* User requested: "Left side: app logo + app name." */}
+        <div className="w-8 h-8 bg-chip-active rounded-lg flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm">M</div>
+        <h1 className="font-serif font-bold text-xl text-primary">ManhwaVault</h1>
+      </div>
+      
+      <div className="flex items-center gap-3 flex-wrap justify-end">
+        <button onClick={() => setEditingTitle({})} className="btn-primary h-9 px-3 sm:px-4">
+          <Plus size={18} /> <span className="hidden sm:inline">Add Title</span>
+        </button>
+        
+        <button
+          onClick={toggleTheme}
+          className="relative w-12 h-6 rounded-full bg-chapter-btn transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-mv-primary flex-shrink-0"
+          aria-label="Toggle theme"
+        >
+          <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform duration-200 flex items-center justify-center ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`}>
+            {theme === 'dark' ? <Moon size={10} className="text-black" /> : <Sun size={10} className="text-amber-500" />}
+          </div>
+        </button>
+
+        <button onClick={() => supabase.auth.signOut()} className="text-xs font-medium text-secondary hover:text-primary transition-colors whitespace-nowrap">
+          Sign Out
+        </button>
+      </div>
+    </header>
+  );
+
+    const TitleEditorModal = () => {
     if (!editingTitle) return null;
 
     const [formData, setFormData] = useState<Partial<Title>>({
@@ -334,35 +387,35 @@ function MainApp() {
     };
 
     return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onPaste={handlePaste}>
-        <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl flex flex-col">
-          <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex justify-between items-center z-10">
-            <h2 className="font-serif font-semibold text-lg">{formData.id ? 'Edit Title' : 'Add Title'}</h2>
-            <button onClick={() => setEditingTitle(null)} className="p-2 -mr-2 text-gray-400 active:text-gray-600"><X size={20} /></button>
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onPaste={handlePaste}>
+        <div className="bg-modal rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col border border-card transition-colors">
+          <div className="sticky top-0 bg-modal border-b border-divider p-4 flex justify-between items-center z-10 transition-colors">
+            <h2 className="font-serif font-semibold text-lg text-primary">{formData.id ? 'Edit Title' : 'Add Title'}</h2>
+            <button onClick={() => setEditingTitle(null)} className="btn-ghost"><X size={20} /></button>
           </div>
           
           <div className="p-4 flex flex-col gap-4">
             {/* Cover Image Section */}
             <div className="flex gap-4 items-start">
-              <div className="w-24 h-32 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200 relative flex items-center justify-center">
+              <div className="w-24 h-32 bg-chapter-btn rounded-lg overflow-hidden flex-shrink-0 border border-input relative flex items-center justify-center transition-colors">
                 {formData.cover ? (
                   <img src={formData.cover} alt="Cover" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <ImageIcon className="text-gray-300" size={32} />
+                  <ImageIcon className="text-secondary" size={32} />
                 )}
               </div>
               <div className="flex-1 flex flex-col gap-2">
-                <label className="text-xs font-semibold text-gray-500 uppercase">Cover Image</label>
+                <label className="text-xs font-semibold text-secondary uppercase">Cover Image</label>
                 <input 
                   type="text" 
                   placeholder="Image URL or paste image" 
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary"
+                  className="w-full bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus placeholder-placeholder transition-colors"
                   value={formData.cover || ''}
                   onChange={e => setFormData(prev => ({ ...prev, cover: e.target.value }))}
                 />
                 <div className="relative">
                   <input type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileUpload} />
-                  <button className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-600 px-3 py-2 rounded-lg text-sm font-medium active:bg-gray-200">
+                  <button className="w-full btn-secondary">
                     <Upload size={16} /> Upload File
                   </button>
                 </div>
@@ -372,17 +425,17 @@ function MainApp() {
             {/* Basic Info */}
             <div className="flex flex-col gap-3">
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Title</label>
-                <input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" value={formData.title || ''} onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))} />
+                <label className="text-xs font-semibold text-secondary uppercase mb-1 block">Title</label>
+                <input type="text" className="w-full bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus placeholder-placeholder transition-colors" value={formData.title || ''} onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))} />
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Chapter</label>
-                  <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" value={formData.ch || 0} onChange={e => setFormData(prev => ({ ...prev, ch: parseInt(e.target.value) || 0 }))} />
+                  <label className="text-xs font-semibold text-secondary uppercase mb-1 block">Chapter</label>
+                  <input type="number" className="w-full bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus transition-colors" value={formData.ch || 0} onChange={e => setFormData(prev => ({ ...prev, ch: parseInt(e.target.value) || 0 }))} />
                 </div>
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Status</label>
-                  <select className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" value={formData.status} onChange={e => setFormData(prev => ({ ...prev, status: e.target.value as TitleStatus }))}>
+                  <label className="text-xs font-semibold text-secondary uppercase mb-1 block">Status</label>
+                  <select className="w-full bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus transition-colors" value={formData.status} onChange={e => setFormData(prev => ({ ...prev, status: e.target.value as TitleStatus }))}>
                     <option value="Reading">Reading</option>
                     <option value="Planned">Planned</option>
                     <option value="Completed">Completed</option>
@@ -392,23 +445,23 @@ function MainApp() {
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Series URL</label>
-                  <input type="url" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" value={formData.url || ''} onChange={e => setFormData(prev => ({ ...prev, url: e.target.value }))} />
+                  <label className="text-xs font-semibold text-secondary uppercase mb-1 block">Series URL</label>
+                  <input type="url" className="w-full bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus placeholder-placeholder transition-colors" value={formData.url || ''} onChange={e => setFormData(prev => ({ ...prev, url: e.target.value }))} />
                 </div>
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Site Name</label>
-                  <input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" value={formData.site || ''} onChange={e => setFormData(prev => ({ ...prev, site: e.target.value }))} />
+                  <label className="text-xs font-semibold text-secondary uppercase mb-1 block">Site Name</label>
+                  <input type="text" className="w-full bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus placeholder-placeholder transition-colors" value={formData.site || ''} onChange={e => setFormData(prev => ({ ...prev, site: e.target.value }))} />
                 </div>
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Rating (0-10)</label>
+                  <label className="text-xs font-semibold text-secondary uppercase mb-1 block">Rating (0-10)</label>
                   <input 
                     type="number" 
                     min="0" 
                     max="10" 
                     step="0.1"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" 
+                    className="w-full bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus transition-colors" 
                     value={formData.rating || 0} 
                     onChange={e => setFormData(prev => ({ ...prev, rating: parseFloat(e.target.value) || 0 }))} 
                   />
@@ -418,19 +471,19 @@ function MainApp() {
               {/* Tags */}
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase block">Tags</label>
+                  <label className="text-xs font-semibold text-secondary uppercase block">Tags</label>
                   <button 
                     onClick={generateTags} 
                     disabled={loadingTags || !formData.title}
-                    className="text-xs text-mv-primary flex items-center gap-1 hover:underline disabled:opacity-50"
+                    className="text-xs text-link flex items-center gap-1 hover:underline disabled:opacity-50"
                   >
                     <Wand2 size={12} /> {loadingTags ? 'Generating...' : 'Suggest Tags'}
                   </button>
                 </div>
                 
                 {suggestedTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
-                    <span className="text-xs text-gray-400 w-full mb-1">Suggestions:</span>
+                  <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-input rounded-lg border border-input transition-colors">
+                    <span className="text-xs text-secondary w-full mb-1">Suggestions:</span>
                     {suggestedTags.map(tag => (
                       <button
                         key={tag}
@@ -439,7 +492,7 @@ function MainApp() {
                             setFormData(prev => ({ ...prev, tags: [...(prev.tags || []), tag.toLowerCase()] }));
                           }
                         }}
-                        className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-600 hover:border-mv-primary hover:text-mv-primary transition-colors"
+                        className="px-2 py-1 bg-chapter-btn border border-input rounded text-xs text-primary hover:border-link hover:text-link transition-colors"
                       >
                         + {tag}
                       </button>
@@ -451,16 +504,16 @@ function MainApp() {
                   <input 
                     type="text" 
                     placeholder="Add tag..." 
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary"
+                    className="flex-1 bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus placeholder-placeholder transition-colors"
                     value={tagInput}
                     onChange={e => setTagInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
                   />
-                  <button onClick={addTag} className="bg-gray-100 px-3 py-2 rounded-lg text-sm font-medium active:bg-gray-200">Add</button>
+                  <button onClick={addTag} className="btn-secondary">Add</button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {formData.tags?.map(tag => (
-                    <span key={tag} className="flex items-center gap-1 bg-mv-primary/10 text-mv-primary px-2 py-1 rounded-md text-xs font-medium">
+                    <span key={tag} className="flex items-center gap-1 bg-chip-active/10 text-link px-2 py-1 rounded-md text-xs font-medium border border-chip-default">
                       {tag} <button onClick={() => removeTag(tag)} className="opacity-50 hover:opacity-100"><X size={12} /></button>
                     </span>
                   ))}
@@ -469,11 +522,11 @@ function MainApp() {
             </div>
           </div>
 
-          <div className="sticky bottom-0 bg-white border-t border-gray-100 p-4 flex justify-between items-center z-10">
+          <div className="sticky bottom-0 bg-modal border-t border-divider p-4 flex justify-between items-center z-10 transition-colors">
             {formData.id ? (
-              <button onClick={() => deleteTitle(formData.id!)} className="p-2 text-red-500 active:bg-red-50 rounded-lg"><Trash2 size={20} /></button>
+              <button onClick={() => deleteTitle(formData.id!)} className="btn-ghost text-red-500 hover:text-red-600 hover:bg-red-500/10"><Trash2 size={20} /></button>
             ) : <div></div>}
-            <button onClick={() => saveTitle(formData)} className="bg-mv-primary text-white px-6 py-2.5 rounded-xl font-medium shadow-sm active:bg-mv-primary/90 flex items-center gap-2">
+            <button onClick={() => saveTitle(formData)} className="btn-primary">
               <Check size={18} /> Save
             </button>
           </div>
@@ -482,7 +535,7 @@ function MainApp() {
     );
   };
 
-  const HomePage = () => {
+    const HomePage = () => {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<TitleStatus | 'All'>('All');
     const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -557,16 +610,16 @@ function MainApp() {
         {/* Quick Resume */}
         {quickResumeTitles.length > 0 && !search && statusFilter === 'All' && !tagFilter && (
           <div className="mb-6">
-            <h2 className="font-serif font-semibold text-lg mb-3 flex items-center gap-2"><Bookmark size={18} className="text-mv-secondary" /> Quick Resume</h2>
+            <h2 className="font-serif font-semibold text-lg mb-3 flex items-center gap-2 text-primary"><Bookmark size={18} className="text-secondary" /> Quick Resume</h2>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 snap-x">
               {quickResumeTitles.map(t => (
-                <div key={`qr-${t.id}`} className="bg-white border border-black/10 rounded-xl p-3 flex-shrink-0 w-64 snap-start shadow-sm flex items-center gap-3">
-                  <div className="w-12 h-16 bg-gray-100 rounded flex-shrink-0 overflow-hidden relative flex items-center justify-center">
-                    {t.cover ? <img src={t.cover} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" /> : <span className="text-mv-primary font-serif font-bold text-xs">{getInitials(t.title)}</span>}
+                <div key={`qr-${t.id}`} className="bg-card border border-card rounded-xl p-3 flex-shrink-0 w-64 snap-start shadow-sm flex items-center gap-3">
+                  <div className="w-12 h-16 bg-chapter-btn rounded flex-shrink-0 overflow-hidden relative flex items-center justify-center">
+                    {t.cover ? <img src={t.cover} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" /> : <span className="text-link font-serif font-bold text-xs">{getInitials(t.title)}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-serif font-medium text-sm truncate">{t.title}</h3>
-                    <p className="text-xs text-gray-500 font-mono mt-0.5">Ch. {t.ch}</p>
+                    <h3 className="font-serif font-medium text-sm truncate text-primary">{t.title}</h3>
+                    <p className="text-xs text-muted font-mono mt-0.5">Ch. {t.ch}</p>
                     <button 
                       onClick={() => {
                         const link = t.url;
@@ -577,7 +630,7 @@ function MainApp() {
                         }
                       }}
                       className={`mt-2 text-xs font-medium flex items-center gap-1 active:opacity-70 ${
-                        t.url ? 'text-mv-primary' : 'text-gray-400'
+                        t.url ? 'text-link' : 'text-muted'
                       }`}
                     >
                       Read Now <ArrowRight size={12} />
@@ -590,18 +643,18 @@ function MainApp() {
         )}
 
         {/* Link Importer */}
-        <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm mb-6">
-          <h2 className="font-serif font-semibold mb-2 text-sm text-gray-700">Quick Add / Update</h2>
+        <div className="bg-card p-4 rounded-xl border border-card shadow-sm mb-6">
+          <h2 className="font-serif font-semibold mb-2 text-sm text-secondary">Quick Add / Update</h2>
           <div className="flex gap-2">
             <input 
               type="url" 
               placeholder="Paste chapter link..." 
-              className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-mv-primary"
+              className="flex-1 bg-input border border-input rounded-lg px-3 py-3 text-sm text-primary focus:outline-none focus:border-focus placeholder-placeholder"
               value={linkInput}
               onChange={e => setLinkInput(e.target.value)}
               onPaste={handlePasteLink}
             />
-            <button className="bg-mv-primary text-white px-4 py-3 rounded-lg font-medium text-sm active:bg-mv-primary/90 flex items-center justify-center min-w-[44px]" onClick={processLink}>
+            <button className="btn-primary min-w-[44px]" onClick={processLink}>
               <Plus size={20} />
             </button>
           </div>
@@ -611,17 +664,17 @@ function MainApp() {
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
               <input 
                 type="text" 
                 placeholder="Search library..." 
-                className="w-full bg-white border border-black/10 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-mv-primary shadow-sm"
+                className="w-full bg-input border border-input rounded-xl pl-10 pr-4 py-3 text-sm text-primary focus:outline-none focus:border-focus shadow-sm placeholder-placeholder"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
             <select 
-              className="bg-white border border-black/10 rounded-xl px-3 py-3 text-sm focus:outline-none focus:border-mv-primary shadow-sm"
+              className="bg-input border border-input rounded-xl px-3 py-3 text-sm text-primary focus:outline-none focus:border-focus shadow-sm"
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value as any)}
             >
@@ -637,7 +690,7 @@ function MainApp() {
           {allTags.length > 0 && (
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 hide-scrollbar">
               <button 
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 border ${!tagFilter ? 'bg-mv-primary text-white border-mv-primary' : 'bg-white text-gray-600 border-gray-200'}`}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 border transition-colors ${!tagFilter ? 'bg-chip-active text-chip-active border-transparent' : 'bg-chip-default text-chip-default border-chip-default hover:border-input'}`}
                 onClick={() => setTagFilter(null)}
               >
                 All Tags
@@ -645,7 +698,7 @@ function MainApp() {
               {allTags.map(tag => (
                 <button 
                   key={tag}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 border ${tagFilter === tag ? 'bg-mv-primary text-white border-mv-primary' : 'bg-white text-gray-600 border-gray-200'}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 border transition-colors ${tagFilter === tag ? 'bg-chip-active text-chip-active border-transparent' : 'bg-chip-default text-chip-default border-chip-default hover:border-input'}`}
                   onClick={() => setTagFilter(tag)}
                 >
                   {tag}
@@ -656,57 +709,51 @@ function MainApp() {
         </div>
 
         {/* Title List */}
-        <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3 md:gap-4">
           {filteredTitles.map(t => (
-            <div key={t.id} className="bg-white border border-black/10 rounded-xl p-3 flex gap-3 shadow-sm relative group">
-              {/* Edit Button overlay (desktop) or absolute (mobile) */}
-              <button onClick={() => setEditingTitle(t)} className="absolute top-2 right-2 p-2 bg-white/80 backdrop-blur rounded-lg text-gray-500 active:text-mv-primary shadow-sm z-10">
-                <Edit2 size={14} />
-              </button>
-
-              {/* Cover */}
-              <div className="w-20 h-28 flex-shrink-0 rounded-md overflow-hidden bg-gray-100 flex items-center justify-center relative">
+            <div key={t.id} className="bg-card border border-card rounded-xl overflow-hidden shadow-sm flex flex-col relative group transition-colors">
+              {/* Cover Image - Top portion */}
+              <div className="aspect-[3/4] w-full bg-chapter-btn relative overflow-hidden">
                 {t.cover ? (
                   <img src={t.cover} alt={t.title} className="w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} referrerPolicy="no-referrer" />
-                ) : null}
-                <div className="absolute inset-0 flex items-center justify-center bg-mv-primary/10 text-mv-primary font-serif font-bold text-xl -z-10">
-                  {getInitials(t.title)}
-                </div>
-                {/* Rating Badge */}
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-chip-active/10 text-link font-serif font-bold text-3xl">
+                    {getInitials(t.title)}
+                  </div>
+                )}
                 {t.rating > 0 && (
-                  <div className="absolute top-1 left-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                    <span className="text-yellow-400">★</span> {t.rating}
+                  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1 border border-white/10">
+                    <Star size={12} className="text-yellow-400 fill-yellow-400" />
+                    <span className="text-white text-xs font-bold">{t.rating.toFixed(1)}</span>
                   </div>
                 )}
               </div>
 
-              {/* Info */}
-              <div className="flex-1 flex flex-col min-w-0 pr-8">
-                <h3 className="font-serif font-semibold text-base leading-tight truncate">{t.title}</h3>
-                <div className="text-xs text-gray-500 mt-1 truncate flex items-center gap-1">
-                  <span className={`w-2 h-2 rounded-full ${t.status === 'Reading' ? 'bg-green-500' : t.status === 'Completed' ? 'bg-blue-500' : t.status === 'Planned' ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
-                  {t.status} {t.site && `• ${t.site}`}
+              {/* Info Section - Bottom portion */}
+              <div className="p-3 flex flex-col flex-1 bg-card transition-colors">
+                <div className="flex justify-between items-start gap-2 mb-1">
+                  <h3 className="font-serif font-semibold text-base leading-tight line-clamp-2 text-primary">{t.title}</h3>
+                  {/* Edit Button */}
+                  <button onClick={() => setEditingTitle(t)} className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center flex-shrink-0" aria-label="Edit">
+                    <Edit2 size={14} />
+                  </button>
                 </div>
                 
-                {/* Tags */}
-                {t.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {t.tags.slice(0,3).map(tag => (
-                      <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-sm truncate max-w-[80px]">{tag}</span>
-                    ))}
-                    {t.tags.length > 3 && <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-sm">+{t.tags.length - 3}</span>}
-                  </div>
-                )}
+                {/* Status */}
+                <div className="flex items-center gap-2 text-xs text-secondary mb-3">
+                   <span className={`w-2 h-2 rounded-full ${t.status === 'Reading' ? 'bg-green-500' : t.status === 'Completed' ? 'bg-blue-500' : t.status === 'Planned' ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
+                   <span>{t.status}</span>
+                </div>
 
-                <div className="mt-auto flex items-center justify-between pt-2">
+                <div className="mt-auto space-y-3">
                   {/* Stepper */}
-                  <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
-                    <button className="px-3 py-2 active:bg-gray-200 text-gray-600" onClick={() => updateChapter(t.id, -1)}><Minus size={16} /></button>
-                    <span className="font-mono text-sm px-2 min-w-[4ch] text-center font-medium">{t.ch}</span>
-                    <button className="px-3 py-2 active:bg-gray-200 text-gray-600" onClick={() => updateChapter(t.id, 1)}><Plus size={16} /></button>
+                  <div className="flex items-center justify-between bg-chapter-btn border border-input rounded-lg overflow-hidden transition-colors">
+                    <button className="px-3 py-2 active:bg-card-hover text-secondary hover:bg-card-hover transition-colors" onClick={() => updateChapter(t.id, -1)}><Minus size={16} /></button>
+                    <span className="font-mono text-sm font-medium text-primary">Ch. {t.ch}</span>
+                    <button className="px-3 py-2 active:bg-card-hover text-secondary hover:bg-card-hover transition-colors" onClick={() => updateChapter(t.id, 1)}><Plus size={16} /></button>
                   </div>
 
-                  {/* Continue Reading */}
+                  {/* Read Now */}
                   <button 
                     onClick={() => {
                       const link = t.url;
@@ -717,11 +764,7 @@ function MainApp() {
                         showToast('No URL saved for this title. Edit the title to add one.');
                       }
                     }}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg ml-2 flex items-center gap-1.5 shadow-sm transition-colors ${
-                      t.url 
-                        ? 'text-white bg-mv-primary active:bg-mv-primary/90' 
-                        : 'text-gray-400 bg-gray-100'
-                    }`}
+                    className={`w-full btn-primary ${!t.url ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Read Now <ExternalLink size={14} />
                   </button>
@@ -730,7 +773,7 @@ function MainApp() {
             </div>
           ))}
           {filteredTitles.length === 0 && (
-            <div className="text-center py-12 text-gray-400">
+            <div className="col-span-2 text-center py-12 text-muted">
               <ImageIcon size={48} className="mx-auto mb-3 opacity-20" />
               <p className="font-serif">No titles found.</p>
             </div>
@@ -767,7 +810,7 @@ function MainApp() {
 
     // Calculate streak
     const sortedDates = Array.from(new Set(readingSessions.map(s => new Date(s.created_at).toDateString())))
-      .map(d => new Date(d).getTime())
+      .map((d: string) => new Date(d).getTime())
       .sort((a, b) => b - a);
     
     let streak = 0;
@@ -801,40 +844,40 @@ function MainApp() {
 
     return (
       <div className="p-4 md:p-6 max-w-4xl mx-auto">
-        <h1 className="font-serif font-bold text-2xl mb-6">Statistics</h1>
+        <h1 className="font-serif font-bold text-2xl mb-6 text-primary">Statistics</h1>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
-            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Weekly Chapters</div>
-            <div className="text-3xl font-mono text-mv-primary">{weeklyChapters}</div>
+          <div className="bg-card p-4 rounded-xl border border-card shadow-sm transition-colors">
+            <div className="text-xs text-muted uppercase font-semibold mb-1">Weekly Chapters</div>
+            <div className="text-3xl font-mono text-link">{weeklyChapters}</div>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
-            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Total Chapters</div>
-            <div className="text-3xl font-mono text-mv-secondary">{totalChapters}</div>
+          <div className="bg-card p-4 rounded-xl border border-card shadow-sm transition-colors">
+            <div className="text-xs text-muted uppercase font-semibold mb-1">Total Chapters</div>
+            <div className="text-3xl font-mono text-secondary">{totalChapters}</div>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
-            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Read Today</div>
-            <div className="text-3xl font-mono text-green-600">{chaptersReadToday}</div>
+          <div className="bg-card p-4 rounded-xl border border-card shadow-sm transition-colors">
+            <div className="text-xs text-muted uppercase font-semibold mb-1">Read Today</div>
+            <div className="text-3xl font-mono text-green-500">{chaptersReadToday}</div>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
-            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Current Streak</div>
+          <div className="bg-card p-4 rounded-xl border border-card shadow-sm transition-colors">
+            <div className="text-xs text-muted uppercase font-semibold mb-1">Current Streak</div>
             <div className="text-3xl font-mono text-orange-500">{streak} days</div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-           <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
-            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Most Read Series</div>
-            <div className="text-xl font-serif font-medium truncate" title={mostReadSeries}>{mostReadSeries}</div>
+           <div className="bg-card p-4 rounded-xl border border-card shadow-sm transition-colors">
+            <div className="text-xs text-muted uppercase font-semibold mb-1">Most Read Series</div>
+            <div className="text-xl font-serif font-medium truncate text-primary" title={mostReadSeries}>{mostReadSeries}</div>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
-            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Avg. Chapters / Day</div>
-            <div className="text-xl font-mono font-medium">{avgChaptersPerDay}</div>
+          <div className="bg-card p-4 rounded-xl border border-card shadow-sm transition-colors">
+            <div className="text-xs text-muted uppercase font-semibold mb-1">Avg. Chapters / Day</div>
+            <div className="text-xl font-mono font-medium text-primary">{avgChaptersPerDay}</div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
-          <h2 className="font-serif font-semibold mb-4 text-lg">Library Status</h2>
+        <div className="bg-card p-4 rounded-xl border border-card shadow-sm transition-colors">
+          <h2 className="font-serif font-semibold mb-4 text-lg text-primary">Library Status</h2>
           <div className="space-y-4">
             {[
               { label: 'Reading', count: stats.reading, color: 'bg-green-500' },
@@ -844,10 +887,10 @@ function MainApp() {
             ].map(item => (
               <div key={item.label}>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="font-medium text-gray-700">{item.label}</span>
-                  <span className="font-mono text-gray-500">{item.count}</span>
+                  <span className="font-medium text-primary">{item.label}</span>
+                  <span className="font-mono text-muted">{item.count}</span>
                 </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-2 bg-chapter-btn rounded-full overflow-hidden transition-colors">
                   <div className={`h-full ${item.color}`} style={{ width: `${stats.total ? (item.count / stats.total) * 100 : 0}%` }}></div>
                 </div>
               </div>
@@ -870,29 +913,29 @@ function MainApp() {
 
     return (
       <div className="p-4 md:p-6 max-w-4xl mx-auto">
-        <h1 className="font-serif font-bold text-2xl mb-6">Reading Log</h1>
+        <h1 className="font-serif font-bold text-2xl mb-6 text-primary">Reading Log</h1>
         
         {Object.keys(groupedLogs).length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
+          <div className="text-center py-12 text-muted">
             <p className="font-serif">No reading history yet.</p>
           </div>
         ) : (
           <div className="space-y-6">
             {Object.entries(groupedLogs).map(([date, dayLogs]: [string, any]) => (
               <div key={date}>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 pl-1">{date}</h3>
-                <div className="bg-white border border-black/10 rounded-xl shadow-sm overflow-hidden">
+                <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 pl-1">{date}</h3>
+                <div className="bg-card border border-card rounded-xl shadow-sm overflow-hidden transition-colors">
                   {dayLogs.map((log, idx) => (
-                    <div key={log.id} className={`p-3 flex items-center justify-between ${idx !== dayLogs.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                    <div key={log.id} className={`p-3 flex items-center justify-between ${idx !== dayLogs.length - 1 ? 'border-b border-card' : ''}`}>
                       <div className="min-w-0 flex-1 pr-4">
-                        <div className="font-medium text-sm truncate">{log.title}</div>
-                        <div className="text-xs text-gray-400 mt-0.5">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div className="font-medium text-sm truncate text-primary">{log.title}</div>
+                        <div className="text-xs text-muted mt-0.5">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                       </div>
                       <div className="flex items-center gap-2 font-mono text-sm flex-shrink-0">
-                        <span className="text-gray-400">{log.from}</span>
-                        <ArrowRight size={12} className="text-gray-300" />
-                        <span className="font-semibold text-mv-primary">{log.to}</span>
-                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded ml-1">+{log.delta}</span>
+                        <span className="text-muted">{log.from}</span>
+                        <ArrowRight size={12} className="text-muted" />
+                        <span className="font-semibold text-link">{log.to}</span>
+                        <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded ml-1 border border-green-500/20">+{log.delta}</span>
                       </div>
                     </div>
                   ))}
@@ -931,28 +974,28 @@ function MainApp() {
 
     return (
       <div className="p-4 md:p-6 max-w-4xl mx-auto">
-        <h1 className="font-serif font-bold text-2xl mb-6">Saved Sites</h1>
+        <h1 className="font-serif font-bold text-2xl mb-6 text-primary">Saved Sites</h1>
 
-        <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm mb-6">
-          <h2 className="font-serif font-semibold mb-3 text-sm">Add New Site</h2>
+        <div className="bg-card p-4 rounded-xl border border-card shadow-sm mb-6 transition-colors">
+          <h2 className="font-serif font-semibold mb-3 text-sm text-secondary">Add New Site</h2>
           <div className="flex flex-col gap-3">
-            <input type="text" placeholder="Site Name (e.g., Asura Scans)" className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" value={siteName} onChange={e => setSiteName(e.target.value)} />
-            <input type="url" placeholder="URL (e.g., https://asurascans.com)" className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-mv-primary" value={siteUrl} onChange={e => setSiteUrl(e.target.value)} />
-            <button onClick={addSite} className="bg-mv-primary text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-mv-primary/90">Add Site</button>
+            <input type="text" placeholder="Site Name (e.g., Asura Scans)" className="bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus placeholder-placeholder transition-colors" value={siteName} onChange={e => setSiteName(e.target.value)} />
+            <input type="url" placeholder="URL (e.g., https://asurascans.com)" className="bg-input border border-input rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-focus placeholder-placeholder transition-colors" value={siteUrl} onChange={e => setSiteUrl(e.target.value)} />
+            <button onClick={addSite} className="btn-primary px-4 py-2 text-sm">Add Site</button>
           </div>
         </div>
 
         <div className="space-y-3">
           {sites.map(site => (
-            <div key={site.id} className="bg-white border border-black/10 rounded-xl p-3 flex justify-between items-center shadow-sm">
+            <div key={site.id} className="bg-card border border-card rounded-xl p-3 flex justify-between items-center shadow-sm transition-colors">
               <div className="min-w-0 pr-4">
-                <div className="font-medium text-sm truncate">{site.name}</div>
-                <a href={site.url} target="_blank" rel="noreferrer" className="text-xs text-mv-primary truncate block hover:underline">{site.url}</a>
+                <div className="font-medium text-sm truncate text-primary">{site.name}</div>
+                <a href={site.url} target="_blank" rel="noreferrer" className="text-xs text-link truncate block hover:underline">{site.url}</a>
               </div>
-              <button onClick={() => removeSite(site.id)} className="p-2 text-red-500 active:bg-red-50 rounded-lg flex-shrink-0"><Trash2 size={18} /></button>
+              <button onClick={() => removeSite(site.id)} className="btn-ghost text-red-500 hover:text-red-600 hover:bg-red-500/10 flex-shrink-0"><Trash2 size={18} /></button>
             </div>
           ))}
-          {sites.length === 0 && <p className="text-center text-gray-400 text-sm py-4">No sites saved.</p>}
+          {sites.length === 0 && <p className="text-center text-muted text-sm py-4">No sites saved.</p>}
         </div>
       </div>
     );
@@ -994,46 +1037,184 @@ function MainApp() {
       }
     };
 
+    const groupedRecs = useMemo(() => {
+      const groups: Record<string, Recommendation[]> = {};
+      recommendations.forEach(rec => {
+        const sec = rec.section || 'other';
+        if (!groups[sec]) groups[sec] = [];
+        groups[sec].push(rec);
+      });
+      return groups;
+    }, [recommendations]);
+
+    const sections = [
+      { id: 'hot_this_week', title: '🔥 Hot This Week', subtitle: 'Most trending Korean manhwa on AniList this week', type: 'row' },
+      { id: 'tier_10', title: '💎 Masterpiece Picks', subtitle: 'Based on your 10★ titles', type: 'grid' },
+      { id: 'tier_9', title: '⭐ Excellent Picks', subtitle: 'Based on your 9★ titles', type: 'grid' },
+      { id: 'tier_8', title: '✨ Great Picks', subtitle: 'Based on your 8★ titles', type: 'grid' },
+      { id: 'tier_7', title: '👍 Good Picks', subtitle: 'Based on your 7★ titles', type: 'grid' },
+    ];
+
+    const [addedRecs, setAddedRecs] = useState<Set<string>>(new Set());
+
+    const handleQuickAdd = async (rec: Recommendation) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showToast('You must be logged in to add titles.');
+        return;
+      }
+
+      // Check if already exists
+      if (titles.some(t => t.title.toLowerCase() === rec.title.toLowerCase())) {
+        showToast('Already in Library');
+        return;
+      }
+
+      const newTitle: Title = {
+        id: generateId(),
+        user_id: user.id,
+        title: rec.title,
+        cover: rec.cover,
+        url: rec.site_url || '',
+        site: 'AniList',
+        tags: rec.tags || [],
+        type: 'Manhwa',
+        status: 'Planned',
+        ch: 0,
+        total: 0,
+        rating: 0,
+        fav: false,
+        note: '',
+        updated: Date.now()
+      };
+
+      const { data, error } = await supabase.from('titles').insert(newTitle).select();
+      
+      if (error) {
+        console.error('Error adding title:', error);
+        showToast('Failed to add title');
+      } else if (data) {
+        setTitles(prev => [data[0] as Title, ...prev]);
+        setAddedRecs(prev => new Set(prev).add(rec.id));
+        showToast('Added to Library!');
+      }
+    };
+
+    const getButtonState = (rec: Recommendation) => {
+      if (addedRecs.has(rec.id)) return { text: 'Added ✓', disabled: true, className: 'bg-green-500/10 text-green-600 border-green-500/20 hover:bg-green-500/10' };
+      if (titles.some(t => t.title.toLowerCase() === rec.title.toLowerCase())) return { text: 'Already in Library', disabled: true, className: 'opacity-50 cursor-not-allowed' };
+      return { text: 'Add to Library', disabled: false, className: 'btn-secondary' };
+    };
+
     return (
-      <div className="p-4 md:p-6 max-w-4xl mx-auto">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-8 pb-20">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="font-serif font-bold text-2xl">Recommendations</h1>
+          <h1 className="font-serif font-bold text-2xl text-primary">Recommendations</h1>
           <button 
             onClick={generateRecs} 
             disabled={loading}
-            className="bg-mv-primary text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-mv-primary/90 disabled:opacity-50"
+            className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
           >
-            {loading ? 'Generating...' : 'Refresh Recommendations'}
+            <Sparkles size={16} className="mr-2" />
+            {loading ? 'Generating...' : 'Refresh'}
           </button>
         </div>
 
-        {recommendations.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
+        {loading ? (
+          <div className="text-center py-20">
+            <div className="animate-spin w-8 h-8 border-2 border-link border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-muted">Analyzing your library...</p>
+          </div>
+        ) : recommendations.length === 0 ? (
+          <div className="text-center py-12 text-muted">
             <p className="font-serif">No recommendations yet. Rate some titles 7+ to get started!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {recommendations.map(rec => (
-              <div key={rec.id} className="bg-white border border-black/10 rounded-xl p-3 flex gap-3 shadow-sm">
-                 <div className="w-16 h-24 flex-shrink-0 rounded-md overflow-hidden bg-gray-100 flex items-center justify-center relative">
-                    {rec.cover ? (
-                      <img src={rec.cover} alt={rec.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="text-mv-primary font-serif font-bold text-xs">{getInitials(rec.title)}</span>
-                    )}
-                 </div>
-                 <div className="flex-1 min-w-0">
-                   <h3 className="font-serif font-semibold text-sm truncate">{rec.title}</h3>
-                   <p className="text-xs text-gray-500 mt-1">Because you liked: <span className="font-medium text-mv-primary">{rec.source_title}</span></p>
-                   <div className="flex flex-wrap gap-1 mt-2">
-                      {rec.tags?.slice(0, 3).map(tag => (
-                        <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-sm">{tag}</span>
-                      ))}
-                   </div>
-                 </div>
-              </div>
-            ))}
-          </div>
+          <>
+            {sections.map(section => {
+              const recs = groupedRecs[section.id];
+              if (!recs || recs.length === 0) return null;
+
+              return (
+                <section key={section.id} className="space-y-4">
+                  <div>
+                    <h2 className="font-serif font-bold text-xl text-primary">{section.title}</h2>
+                    {section.subtitle && <p className="text-sm text-muted">{section.subtitle}</p>}
+                  </div>
+                  
+                  {section.type === 'row' ? (
+                    <div className="flex overflow-x-auto gap-4 pb-4 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide snap-x">
+                      {recs.map(rec => {
+                        const btnState = getButtonState(rec);
+                        return (
+                          <div key={rec.id} className="min-w-[160px] w-[160px] bg-card border border-card rounded-xl p-3 shadow-sm flex flex-col transition-colors snap-start">
+                             <div className="w-full aspect-[2/3] rounded-lg overflow-hidden bg-chapter-btn mb-3 relative">
+                                {rec.cover ? (
+                                  <img src={rec.cover} alt={rec.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-muted font-serif text-xl font-bold bg-chapter-btn">
+                                    {getInitials(rec.title)}
+                                  </div>
+                                )}
+                             </div>
+                             <h3 className="font-serif font-bold text-sm text-primary line-clamp-2 mb-1">{rec.title}</h3>
+                             <p className="text-[10px] text-orange-500 font-medium mb-2">🔥 Trending this week</p>
+                             <div className="flex flex-wrap gap-1 mb-3">
+                                {rec.tags?.slice(0, 2).map(tag => (
+                                  <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-chip-default text-chip-default rounded-sm border border-chip-default transition-colors">{tag}</span>
+                                ))}
+                             </div>
+                             <button 
+                               onClick={() => handleQuickAdd(rec)} 
+                               disabled={btnState.disabled}
+                               className={`mt-auto w-full text-xs py-1.5 justify-center rounded-lg border transition-colors ${btnState.className === 'btn-secondary' ? 'btn-secondary' : btnState.className}`}
+                             >
+                               {btnState.text}
+                             </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {recs.map(rec => {
+                        const btnState = getButtonState(rec);
+                        return (
+                          <div key={rec.id} className="bg-card border border-card rounded-xl p-3 flex gap-3 shadow-sm transition-colors">
+                             <div className="w-20 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-chapter-btn relative">
+                                {rec.cover ? (
+                                  <img src={rec.cover} alt={rec.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-muted font-serif text-xl font-bold bg-chapter-btn">
+                                    {getInitials(rec.title)}
+                                  </div>
+                                )}
+                             </div>
+                             <div className="flex-1 min-w-0 flex flex-col">
+                               <h3 className="font-serif font-bold text-primary truncate mb-1">{rec.title}</h3>
+                               <p className="text-xs text-muted line-clamp-1 mb-2">Because you liked: <span className="font-medium text-link">{rec.source_title}</span></p>
+                               <div className="flex flex-wrap gap-1 mb-auto">
+                                  {rec.tags?.slice(0, 3).map(tag => (
+                                    <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-chip-default text-chip-default rounded-sm border border-chip-default transition-colors">{tag}</span>
+                                  ))}
+                               </div>
+                               <button 
+                                 onClick={() => handleQuickAdd(rec)} 
+                                 disabled={btnState.disabled}
+                                 className={`w-full text-xs mt-2 py-1.5 justify-center rounded-lg border transition-colors ${btnState.className === 'btn-secondary' ? 'btn-secondary' : btnState.className}`}
+                               >
+                                 {btnState.text}
+                               </button>
+                             </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </>
         )}
       </div>
     );
@@ -1175,42 +1356,42 @@ function MainApp() {
 
     return (
       <div className="p-4 md:p-6 max-w-4xl mx-auto">
-        <h1 className="font-serif font-bold text-2xl mb-6">Data Management</h1>
+        <h1 className="font-serif font-bold text-2xl mb-6 text-primary">Data Management</h1>
 
         <div className="grid gap-4 md:grid-cols-2 mb-6">
-          <div className="bg-white p-5 rounded-xl border border-black/10 shadow-sm flex flex-col items-center text-center">
-            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-3">
+          <div className="bg-card p-5 rounded-xl border border-card shadow-sm flex flex-col items-center text-center transition-colors">
+            <div className="w-12 h-12 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mb-3 border border-blue-500/20">
               <Download size={24} />
             </div>
-            <h2 className="font-serif font-semibold mb-1">Export Library</h2>
-            <p className="text-sm text-gray-500 mb-4">Download your entire library as a JSON file for backup.</p>
-            <button onClick={handleExport} className="w-full bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium text-sm active:bg-gray-50">
+            <h2 className="font-serif font-semibold mb-1 text-primary">Export Library</h2>
+            <p className="text-sm text-muted mb-4">Download your entire library as a JSON file for backup.</p>
+            <button onClick={handleExport} className="w-full btn-secondary px-4 py-2 text-sm">
               Download JSON
             </button>
           </div>
 
-          <div className="bg-white p-5 rounded-xl border border-black/10 shadow-sm flex flex-col items-center text-center">
-            <div className="w-12 h-12 bg-green-50 text-green-600 rounded-full flex items-center justify-center mb-3">
+          <div className="bg-card p-5 rounded-xl border border-card shadow-sm flex flex-col items-center text-center transition-colors">
+            <div className="w-12 h-12 bg-green-500/10 text-green-500 rounded-full flex items-center justify-center mb-3 border border-green-500/20">
               <Upload size={24} />
             </div>
-            <h2 className="font-serif font-semibold mb-1">Import Library</h2>
-            <p className="text-sm text-gray-500 mb-4">Upload a JSON file from another tracker or backup.</p>
+            <h2 className="font-serif font-semibold mb-1 text-primary">Import Library</h2>
+            <p className="text-sm text-muted mb-4">Upload a JSON file from another tracker or backup.</p>
             <div className="relative w-full">
               <input type="file" accept=".json" onChange={handleImport} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-              <button className="w-full bg-mv-primary text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-mv-primary/90 pointer-events-none">
+              <button className="w-full btn-primary px-4 py-2 text-sm pointer-events-none">
                 Select JSON File
               </button>
             </div>
           </div>
         </div>
 
-        <div className="bg-red-50 p-5 rounded-xl border border-red-100 shadow-sm flex flex-col items-center text-center">
-          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-3">
+        <div className="bg-red-500/5 p-5 rounded-xl border border-red-500/10 shadow-sm flex flex-col items-center text-center">
+          <div className="w-12 h-12 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-3 border border-red-500/20">
             <Trash2 size={24} />
           </div>
-          <h2 className="font-serif font-semibold mb-1 text-red-800">Danger Zone</h2>
-          <p className="text-sm text-red-600/80 mb-4">Permanently delete all titles, reading history, and saved sites. This cannot be undone.</p>
-          <button onClick={handleClearData} className="w-full bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-medium text-sm active:bg-red-50 hover:bg-red-50 transition-colors">
+          <h2 className="font-serif font-semibold mb-1 text-red-600 dark:text-red-400">Danger Zone</h2>
+          <p className="text-sm text-red-600/70 dark:text-red-400/70 mb-4">Permanently delete all titles, reading history, and saved sites. This cannot be undone.</p>
+          <button onClick={handleClearData} className="w-full bg-transparent border border-red-500/30 text-red-600 dark:text-red-400 px-4 py-2 rounded-lg font-medium text-sm hover:bg-red-500/10 transition-colors">
             Clear All Data
           </button>
         </div>
@@ -1220,12 +1401,12 @@ function MainApp() {
 
   // --- Render ---
   return (
-    <div className="flex flex-col h-screen bg-mv-bg text-gray-900 font-sans">
+    <div className="flex flex-col h-screen bg-page text-primary font-sans transition-colors">
       
       {/* Sidebar (Desktop) */}
-      <aside className="hidden md:flex flex-col w-64 fixed h-full bg-white border-r border-black/5 z-40">
+      <aside className="hidden md:flex flex-col w-64 fixed h-full bg-sidebar border-r border-divider z-40 transition-colors">
         <div className="p-6">
-          <h1 className="font-serif font-bold text-2xl text-mv-primary tracking-tight">ManhwaVault</h1>
+          <h1 className="font-serif font-bold text-2xl text-link tracking-tight">ManhwaVault</h1>
         </div>
         <nav className="flex-1 px-4 space-y-2">
           {[
@@ -1239,7 +1420,7 @@ function MainApp() {
             <button 
               key={item.id}
               onClick={() => setCurrentTab(item.id as any)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${currentTab === item.id ? 'bg-mv-primary/10 text-mv-primary' : 'text-gray-600 hover:bg-gray-50'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${currentTab === item.id ? 'bg-chip-active/10 text-link' : 'text-secondary hover:bg-card-hover hover:text-primary'}`}
             >
               <item.icon size={18} /> {item.label}
             </button>
@@ -1248,34 +1429,23 @@ function MainApp() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pb-20 md:pb-0 md:pl-64 relative">
-        {/* Mobile Header */}
-        <div className="md:hidden sticky top-0 bg-white/80 backdrop-blur-md border-b border-black/5 p-4 z-30 flex justify-between items-center">
-          <h1 className="font-serif font-bold text-xl text-mv-primary">ManhwaVault</h1>
-          {currentTab === 'home' && (
-            <button onClick={() => setEditingTitle({})} className="p-2 bg-mv-primary text-white rounded-full shadow-sm active:bg-mv-primary/90">
-              <Plus size={18} />
-            </button>
-          )}
+      <main className="flex-1 flex flex-col overflow-hidden md:pl-64 relative">
+        {/* Unified Header */}
+        <Header />
+
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
+            {currentTab === 'home' && <HomePage />}
+            {currentTab === 'stats' && <StatsPage />}
+            {currentTab === 'recommendations' && <RecommendationsPage />}
+            {currentTab === 'log' && <LogPage />}
+            {currentTab === 'sites' && <SitesPage />}
+            {currentTab === 'import' && <ImportExportPage />}
         </div>
-
-        {/* Desktop FAB */}
-        {currentTab === 'home' && (
-          <button onClick={() => setEditingTitle({})} className="hidden md:flex fixed bottom-8 right-8 bg-mv-primary text-white p-4 rounded-full shadow-lg hover:bg-mv-primary/90 transition-transform hover:scale-105 z-40">
-            <Plus size={24} />
-          </button>
-        )}
-
-        {currentTab === 'home' && <HomePage />}
-        {currentTab === 'stats' && <StatsPage />}
-        {currentTab === 'recommendations' && <RecommendationsPage />}
-        {currentTab === 'log' && <LogPage />}
-        {currentTab === 'sites' && <SitesPage />}
-        {currentTab === 'import' && <ImportExportPage />}
       </main>
 
       {/* Bottom Nav (Mobile) */}
-      <nav className="md:hidden fixed bottom-0 w-full bg-white border-t border-black/5 flex justify-around items-center h-16 z-40 pb-safe">
+      <nav className="md:hidden fixed bottom-0 w-full bg-bottomnav border-t border-divider flex justify-around items-center h-16 z-40 pb-safe transition-colors">
         {[
           { id: 'home', icon: Home, label: 'Home' },
           { id: 'stats', icon: BarChart2, label: 'Stats' },
@@ -1287,7 +1457,7 @@ function MainApp() {
           <button 
             key={item.id}
             onClick={() => setCurrentTab(item.id as any)}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${currentTab === item.id ? 'text-mv-primary' : 'text-gray-400'}`}
+            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${currentTab === item.id ? 'text-link' : 'text-secondary'}`}
           >
             <item.icon size={20} strokeWidth={currentTab === item.id ? 2.5 : 2} />
             <span className="text-[10px] font-medium">{item.label}</span>
@@ -1296,26 +1466,25 @@ function MainApp() {
       </nav>
 
       <TitleEditorModal />
-      <button onClick={() => supabase.auth.signOut()} className="fixed top-4 right-4 text-xs text-gray-400">Sign Out</button>
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl z-50 flex items-center gap-2 animate-in fade-in slide-in-from-top-4">
-          <Check size={18} className="text-green-400" />
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-card text-primary px-6 py-3 rounded-full shadow-xl z-50 flex items-center gap-2 animate-in fade-in slide-in-from-top-4 border border-card">
+          <Check size={18} className="text-green-500" />
           <span className="text-sm font-medium">{toast}</span>
         </div>
       )}
 
       {/* Confirm Dialog */}
       {confirmDialog && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-6 flex flex-col gap-4">
-            <h2 className="font-serif font-bold text-xl text-gray-900">{confirmDialog.title}</h2>
-            <p className="text-gray-600 text-sm">{confirmDialog.message}</p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-modal rounded-2xl w-full max-w-sm shadow-xl p-6 flex flex-col gap-4 border border-card">
+            <h2 className="font-serif font-bold text-xl text-primary">{confirmDialog.title}</h2>
+            <p className="text-secondary text-sm">{confirmDialog.message}</p>
             <div className="flex gap-3 mt-2">
               <button 
                 onClick={() => setConfirmDialog(null)} 
-                className="flex-1 px-4 py-2.5 rounded-xl font-medium text-sm bg-gray-100 text-gray-700 active:bg-gray-200"
+                className="flex-1 btn-secondary"
               >
                 Cancel
               </button>
@@ -1324,7 +1493,7 @@ function MainApp() {
                   confirmDialog.onConfirm();
                   setConfirmDialog(null);
                 }} 
-                className="flex-1 px-4 py-2.5 rounded-xl font-medium text-sm bg-red-600 text-white active:bg-red-700"
+                className="flex-1 px-4 py-2.5 rounded-xl font-medium text-sm bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 active:bg-red-500/30"
               >
                 Confirm
               </button>

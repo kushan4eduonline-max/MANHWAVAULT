@@ -2,17 +2,270 @@
 @import "tailwindcss";
 
 @theme {
-  --color-mv-bg: #f5f3ef;
-  --color-mv-card: #ffffff;
-  --color-mv-primary: #0d6e6e;
-  --color-mv-secondary: #c47d0e;
   --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Literata", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+/* Light Mode Token Set */
+.theme-light {
+  /* Backgrounds */
+  --bg-page:              #F3F4EF;
+  --bg-sidebar:           #FFFFFF;
+  --bg-card:              #FFFFFF;
+  --bg-card-hover:        #F9FAFB;
+  --bg-header:            #FFFFFF;
+  --bg-bottomnav:         #FFFFFF;
+  --bg-input:             #FFFFFF;
+  --bg-dropdown:          #FFFFFF;
+  --bg-modal:             #FFFFFF;
+  --bg-chip-default:      #FFFFFF;
+  --bg-chip-active:       #0F766E;
+  --bg-chapter-btn:       #F3F4F6;
+
+  /* Borders */
+  --border-card:          #E5E7EB;
+  --border-input:         #D1D5DB;
+  --border-chip-default:  #D1D5DB;
+  --border-divider:       #E5E7EB;
+  --border-focus:         #0F766E;
+
+  /* Text */
+  --text-primary:         #111827;
+  --text-secondary:       #4B5563;
+  --text-muted:           #9CA3AF;
+  --text-placeholder:     #9CA3AF;
+  --text-link:            #0F766E;
+  --text-chip-default:    #374151;
+  --text-chip-active:     #FFFFFF;
+
+  /* Buttons */
+  --btn-primary-bg:       #0F766E;
+  --btn-primary-hover:    #0D6B63;
+  --btn-primary-active:   #0A5C55;
+  --btn-primary-text:     #FFFFFF;
+  --btn-primary-focus:    rgba(15, 118, 110, 0.4);
+
+  --btn-secondary-bg:     transparent;
+  --btn-secondary-border: #D1D5DB;
+  --btn-secondary-text:   #374151;
+  --btn-secondary-hover:  #F3F4F6;
+
+  --btn-fab-bg:           #0F766E;
+  --btn-fab-hover:        #0D6B63;
+  --btn-fab-text:         #FFFFFF;
+
+  /* Sidebar */
+  --sidebar-bg:           #FFFFFF;
+  --sidebar-active-bg:    #0D4F4F;
+  --sidebar-active-text:  #FFFFFF;
+  --sidebar-inactive-text:#4B5563;
+  --sidebar-hover-bg:     #F0FDF4;
+
+  /* Misc */
+  --badge-star-bg:        #F59E0B;
+  --badge-star-text:      #000000;
+  --status-reading:       #10B981;
+  --status-planned:       #F59E0B;
+  --status-completed:     #6B7280;
+  --status-onhold:        #3B82F6;
+  --status-dropped:       #EF4444;
+  --shadow-card:          0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --scrollbar-thumb:      #D1D5DB;
+  --scrollbar-track:      transparent;
+}
+
+/* Dark Mode Token Set */
+.theme-dark {
+  /* Backgrounds */
+  --bg-page:              #080D09;
+  --bg-sidebar:           #0D1510;
+  --bg-card:              #111C13;
+  --bg-card-hover:        #162019;
+  --bg-header:            #0D1510;
+  --bg-bottomnav:         #0D1510;
+  --bg-input:             #162019;
+  --bg-dropdown:          #162019;
+  --bg-modal:             #111C13;
+  --bg-chip-default:      rgba(255,255,255,0.05);
+  --bg-chip-active:       #10B981;
+  --bg-chapter-btn:       rgba(16,185,129,0.1);
+
+  /* Borders */
+  --border-card:          rgba(16,185,129,0.12);
+  --border-input:         rgba(16,185,129,0.2);
+  --border-chip-default:  rgba(255,255,255,0.1);
+  --border-divider:       rgba(255,255,255,0.06);
+  --border-focus:         #10B981;
+
+  /* Text */
+  --text-primary:         #E5E7EB;
+  --text-secondary:       #9CA3AF;
+  --text-muted:           #6B7280;
+  --text-placeholder:     #6B7280;
+  --text-link:            #10B981;
+  --text-chip-default:    #9CA3AF;
+  --text-chip-active:     #FFFFFF;
+
+  /* Buttons */
+  --btn-primary-bg:       #10B981;
+  --btn-primary-hover:    #059669;
+  --btn-primary-active:   #047857;
+  --btn-primary-text:     #FFFFFF;
+  --btn-primary-focus:    rgba(16,185,129,0.5);
+
+  --btn-secondary-bg:     rgba(16,185,129,0.08);
+  --btn-secondary-border: rgba(16,185,129,0.25);
+  --btn-secondary-text:   #E5E7EB;
+  --btn-secondary-hover:  rgba(16,185,129,0.15);
+
+  --btn-fab-bg:           #10B981;
+  --btn-fab-hover:        #059669;
+  --btn-fab-text:         #FFFFFF;
+
+  /* Sidebar */
+  --sidebar-bg:           #0D1510;
+  --sidebar-active-bg:    rgba(16,185,129,0.15);
+  --sidebar-active-text:  #10B981;
+  --sidebar-inactive-text:#9CA3AF;
+  --sidebar-hover-bg:     rgba(16,185,129,0.07);
+
+  /* Misc */
+  --badge-star-bg:        #F59E0B;
+  --badge-star-text:      #000000;
+  --status-reading:       #10B981;
+  --status-planned:       #F59E0B;
+  --status-completed:     #6B7280;
+  --status-onhold:        #3B82F6;
+  --status-dropped:       #EF4444;
+  --shadow-card:          0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --scrollbar-thumb:      rgba(16,185,129,0.3);
+  --scrollbar-track:      transparent;
+}
+
 body {
-  background-color: var(--color-mv-bg);
-  color: #1a1a1a;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
   font-family: var(--font-sans);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ... existing code ... */
+
+/* Button Utility Classes */
+.btn-primary {
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--btn-primary-hover);
+}
+.btn-primary:active:not(:disabled) {
+  background-color: var(--btn-primary-active);
+}
+.btn-primary:focus-visible {
+  outline: 2px solid var(--btn-primary-focus);
+  outline-offset: 2px;
+}
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  color: var(--btn-secondary-text);
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--btn-secondary-hover);
+}
+.btn-secondary:active:not(:disabled) {
+  opacity: 0.8;
+}
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--text-muted);
+  border-radius: 9999px;
+  padding: 8px;
+  transition: all 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-ghost:hover:not(:disabled) {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+.btn-ghost:active:not(:disabled) {
+  background-color: var(--bg-card-hover);
+}
+.btn-ghost:focus-visible {
+  outline: 2px solid var(--btn-primary-focus);
+}
+
+/* Theme Utility Classes */
+.bg-page { background-color: var(--bg-page); }
+.bg-sidebar { background-color: var(--bg-sidebar); }
+.bg-card { background-color: var(--bg-card); }
+.bg-card-hover { background-color: var(--bg-card-hover); }
+.bg-header { background-color: var(--bg-header); }
+.bg-bottomnav { background-color: var(--bg-bottomnav); }
+.bg-input { background-color: var(--bg-input); }
+.bg-dropdown { background-color: var(--bg-dropdown); }
+.bg-modal { background-color: var(--bg-modal); }
+.bg-chip-default { background-color: var(--bg-chip-default); }
+.bg-chip-active { background-color: var(--bg-chip-active); }
+.bg-chapter-btn { background-color: var(--bg-chapter-btn); }
+
+.border-card { border-color: var(--border-card); }
+.border-input { border-color: var(--border-input); }
+.border-chip-default { border-color: var(--border-chip-default); }
+.border-divider { border-color: var(--border-divider); }
+.border-focus { border-color: var(--border-focus); }
+.border-link { border-color: var(--text-link); }
+
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
+.text-placeholder { color: var(--text-placeholder); }
+.text-link { color: var(--text-link); }
+.text-chip-default { color: var(--text-chip-default); }
+.text-chip-active { color: var(--text-chip-active); }
+
+.shadow-card { box-shadow: var(--shadow-card); }
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
 }
