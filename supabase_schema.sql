@@ -60,6 +60,7 @@ create policy "Authenticated users can view site domains"
 -- Update titles table
 alter table public.titles add column if not exists latest_chapter numeric default 0;
 alter table public.titles add column if not exists preferred_source text;
+alter table public.titles add column if not exists rating numeric default 0;
 
 -- Create recommendations table
 create table if not exists public.recommendations (
