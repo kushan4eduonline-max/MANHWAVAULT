@@ -41,29 +41,6 @@ export interface Site {
 }
 
 // --- Hooks ---
-function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
-  const [storedValue, setStoredValue] = useState<T>(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.error(error);
-      return initialValue;
-    }
-  });
-
-  const setValue = (value: T | ((val: T) => T)) => {
-    try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      window.localStorage.setItem(key, JSON.stringify(valueToStore));
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  return [storedValue, setValue];
-}
 
 // --- Helpers ---
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -106,6 +83,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+    
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
@@ -119,6 +101,7 @@ export default function App() {
   }, []);
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  if (!supabase) return <div className="flex items-center justify-center min-h-screen text-red-500">Supabase environment variables are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.</div>;
   if (!session) return <Auth onAuthSuccess={() => {}} />;
 
   return <MainApp />;
@@ -135,6 +118,7 @@ function MainApp() {
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
   
   useEffect(() => {
+    if (!supabase) return;
     const fetchData = async () => {
       const { data: titlesData } = await supabase.from('titles').select('*');
       const { data: logsData } = await supabase.from('logs').select('*');
@@ -186,14 +170,19 @@ function MainApp() {
     }
   };
 
-  const saveTitle = (titleData: Partial<Title>) => {
+  const saveTitle = async (titleData: Partial<Title>) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     if (titleData.id) {
       // Update
-      setTitles(prev => prev.map(t => t.id === titleData.id ? { ...t, ...titleData, updated: Date.now() } as Title : t));
+      const { data, error } = await supabase.from('titles').update({ ...titleData, updated: Date.now() }).eq('id', titleData.id).select();
+      if (data) setTitles(prev => prev.map(t => t.id === titleData.id ? data[0] as Title : t));
     } else {
       // Create
       const newTitle: Title = {
         id: generateId(),
+        user_id: user.id,
         title: titleData.title || 'Untitled',
         type: titleData.type || 'Manhwa',
         status: titleData.status || 'Reading',
@@ -208,7 +197,8 @@ function MainApp() {
         note: titleData.note || '',
         updated: Date.now()
       };
-      setTitles(prev => [newTitle, ...prev]);
+      const { data, error } = await supabase.from('titles').insert(newTitle).select();
+      if (data) setTitles(prev => [data[0] as Title, ...prev]);
     }
     setEditingTitle(null);
   };
@@ -217,10 +207,13 @@ function MainApp() {
     setConfirmDialog({
       title: 'Delete Title',
       message: 'Are you sure you want to delete this title? This action cannot be undone.',
-      onConfirm: () => {
-        setTitles(prev => prev.filter(t => t.id !== id));
-        setEditingTitle(null);
-        showToast('Title deleted.');
+      onConfirm: async () => {
+        const { error } = await supabase.from('titles').delete().eq('id', id);
+        if (!error) {
+          setTitles(prev => prev.filter(t => t.id !== id));
+          setEditingTitle(null);
+          showToast('Title deleted.');
+        }
       }
     });
   };
@@ -737,16 +730,24 @@ function MainApp() {
     const [siteName, setSiteName] = useState('');
     const [siteUrl, setSiteUrl] = useState('');
 
-    const addSite = () => {
+    const addSite = async () => {
       if (siteName && siteUrl) {
-        setSites(prev => [...prev, { id: generateId(), name: siteName, url: siteUrl, type: 'General' }]);
-        setSiteName('');
-        setSiteUrl('');
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data, error } = await supabase.from('sites').insert({ name: siteName, url: siteUrl, user_id: user.id }).select();
+        if (data) {
+          setSites(prev => [...prev, data[0] as Site]);
+          setSiteName('');
+          setSiteUrl('');
+        }
       }
     };
 
-    const removeSite = (id: string) => {
-      setSites(prev => prev.filter(s => s.id !== id));
+    const removeSite = async (id: string) => {
+      const { error } = await supabase.from('sites').delete().eq('id', id);
+      if (!error) {
+        setSites(prev => prev.filter(s => s.id !== id));
+      }
     };
 
     return (
