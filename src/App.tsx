@@ -247,7 +247,7 @@ function MainApp() {
     } else {
       // Create
       const newTitle: Title = {
-        id: generateId(),
+        
         user_id: user.id,
         title: titleData.title || 'Untitled',
         type: titleData.type || 'Manhwa',
@@ -541,7 +541,7 @@ function MainApp() {
     const [tagFilter, setTagFilter] = useState<string | null>(null);
     const [linkInput, setLinkInput] = useState('');
 
-    const processLink = async  () => {
+    const processLink = () => {
       if (!linkInput.trim()) return;
       const parsed = parseLink(linkInput);
       
@@ -571,18 +571,8 @@ function MainApp() {
         showToast(`Updated existing title: ${existing.title} to Chapter ${newCh}`);
       } else {
         // Open modal prefilled
-                let coverImage = '';
-        try {
-          const { data: metaData } = await supabase.functions.invoke('fetch-metadata', {
-            body: { url: linkInput.trim() }
-          });
-          if (metaData?.image) coverImage = metaData.image;
-          if (metaData?.title && !parsed.title) parsed.title = metaData.title;
-        } catch (_) {}
-        // Open modal prefilled with cover
         setEditingTitle({
           title: parsed.title,
-                    cover: coverImage,
           ch: parseInt(parsed.chapter) || 0,
           url: parsed.url,
           site: parsed.siteName,
@@ -1014,6 +1004,38 @@ function MainApp() {
   const RecommendationsPage = () => {
     const [loading, setLoading] = useState(false);
 
+    const fetchRecommendations = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('recommendations')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('score', { ascending: false });
+        
+        console.log('Raw recommendations data:', data);
+
+        if (error) throw error;
+        
+        if (data) setRecommendations(data as Recommendation[]);
+      } catch (e: any) {
+        console.error('Recommendation Fetch Error:', e);
+        showToast('Failed to fetch recommendations.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    useEffect(() => {
+      fetchRecommendations();
+    }, []);
+
     const generateRecs = async () => {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
@@ -1028,16 +1050,9 @@ function MainApp() {
           body: { user_id: user.id }
         });
         
-        if (error) {
-          console.error('Function Error:', error);
-          throw new Error(error.message || 'Function invocation failed');
-        }
+        if (error) throw new Error(error.message || 'Function invocation failed');
         
-        // Refresh recs
-        const { data: recsData, error: fetchError } = await supabase.from('recommendations').select('*');
-        if (fetchError) throw fetchError;
-        
-        if (recsData) setRecommendations(recsData as Recommendation[]);
+        await fetchRecommendations();
         showToast('Recommendations generated!');
       } catch (e: any) {
         console.error('Recommendation Error:', e);
@@ -1050,12 +1065,14 @@ function MainApp() {
     const groupedRecs = useMemo(() => {
       const groups: Record<string, Recommendation[]> = {};
       recommendations.forEach(rec => {
-        const sec = rec.section || 'other';
+        const sec = rec.section || 'personalized';
         if (!groups[sec]) groups[sec] = [];
         groups[sec].push(rec);
       });
       return groups;
     }, [recommendations]);
+
+    const isPersonalizedFallback = Object.keys(groupedRecs).length === 1 && groupedRecs['personalized'];
 
     const sections = [
       { id: 'hot_this_week', title: '🔥 Hot This Week', subtitle: 'Most trending Korean manhwa on AniList this week', type: 'row' },
@@ -1074,14 +1091,13 @@ function MainApp() {
         return;
       }
 
-      // Check if already exists
       if (titles.some(t => t.title.toLowerCase() === rec.title.toLowerCase())) {
         showToast('Already in Library');
         return;
       }
 
       const newTitle: Title = {
-        id: generateId(),
+       
         user_id: user.id,
         title: rec.title,
         cover: rec.cover,
@@ -1139,6 +1155,43 @@ function MainApp() {
           <div className="text-center py-12 text-muted">
             <p className="font-serif">No recommendations yet. Rate some titles 7+ to get started!</p>
           </div>
+        ) : isPersonalizedFallback ? (
+          <section className="space-y-4">
+            <h2 className="font-serif font-bold text-xl text-primary">For You</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {recommendations.map(rec => {
+                const btnState = getButtonState(rec);
+                return (
+                  <div key={rec.id} className="bg-card border border-card rounded-xl p-3 flex gap-3 shadow-sm transition-colors">
+                     <div className="w-20 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-chapter-btn relative">
+                        {rec.cover ? (
+                          <img src={rec.cover} alt={rec.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted font-serif text-xl font-bold bg-chapter-btn">
+                            {getInitials(rec.title)}
+                          </div>
+                        )}
+                     </div>
+                     <div className="flex-1 min-w-0 flex flex-col">
+                       <h3 className="font-serif font-bold text-primary truncate mb-1">{rec.title}</h3>
+                       <div className="flex flex-wrap gap-1 mb-auto">
+                          {rec.tags?.slice(0, 3).map(tag => (
+                            <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-chip-default text-chip-default rounded-sm border border-chip-default transition-colors">{tag}</span>
+                          ))}
+                       </div>
+                       <button 
+                         onClick={() => handleQuickAdd(rec)} 
+                         disabled={btnState.disabled}
+                         className={`w-full text-xs mt-2 py-1.5 justify-center rounded-lg border transition-colors ${btnState.className === 'btn-secondary' ? 'btn-secondary' : btnState.className}`}
+                       >
+                         {btnState.text}
+                       </button>
+                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         ) : (
           <>
             {sections.map(section => {
