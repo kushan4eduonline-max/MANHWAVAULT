@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Home, BarChart2, List as ListIcon, Globe, Download, Plus, Minus, ExternalLink, Search, X, Image as ImageIcon, Upload, Edit2, Trash2, Check, ArrowRight, Bookmark, Filter } from 'lucide-react';
+import { supabase } from './services/supabaseClient';
+import { Auth } from './components/Auth';
 
 // --- Types ---
 export type TitleStatus = 'Reading' | 'Completed' | 'Planned' | 'Dropped';
@@ -100,14 +102,49 @@ function parseLink(url: string) {
 
 // --- Main App ---
 export default function App() {
-  const [titles, setTitles] = useLocalStorage<Title[]>('mv_titles', []);
-  const [logs, setLogs] = useLocalStorage<LogEntry[]>('mv_log', []);
-  const [sites, setSites] = useLocalStorage<Site[]>('mv_sites', []);
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  if (!session) return <Auth onAuthSuccess={() => {}} />;
+
+  return <MainApp />;
+}
+
+function MainApp() {
+  const [titles, setTitles] = useState<Title[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
   
   const [currentTab, setCurrentTab] = useState<'home' | 'stats' | 'log' | 'sites' | 'import'>('home');
   const [editingTitle, setEditingTitle] = useState<Partial<Title> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
+  
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: titlesData } = await supabase.from('titles').select('*');
+      const { data: logsData } = await supabase.from('logs').select('*');
+      const { data: sitesData } = await supabase.from('sites').select('*');
+      if (titlesData) setTitles(titlesData as Title[]);
+      if (logsData) setLogs(logsData as LogEntry[]);
+      if (sitesData) setSites(sitesData as Site[]);
+    };
+    fetchData();
+  }, []);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -115,35 +152,38 @@ export default function App() {
   };
 
   // --- Actions ---
-  const addLog = (log: LogEntry) => {
-    setLogs(prev => [log, ...prev].slice(0, 500));
+  const addLog = async (log: LogEntry) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data, error } = await supabase.from('logs').insert({ ...log, user_id: user.id }).select();
+    if (data) setLogs(prev => [data[0] as LogEntry, ...prev].slice(0, 500));
   };
 
-  const updateChapter = (id: string, delta: number) => {
-    setTitles(prev => prev.map(t => {
-      if (t.id === id) {
-        const newCh = Math.max(0, t.ch + delta);
-        if (newCh !== t.ch) {
-          addLog({
-            id: generateId(),
-            titleId: t.id,
-            title: t.title,
-            from: t.ch,
-            to: newCh,
-            delta: newCh - t.ch,
-            timestamp: Date.now()
-          });
-          
-          let newStatus = t.status;
-          if (newCh > t.ch && t.status === 'Planned') {
-            newStatus = 'Reading';
-          }
-          
-          return { ...t, ch: newCh, status: newStatus, updated: Date.now() };
-        }
+  const updateChapter = async (id: string, delta: number) => {
+    const title = titles.find(t => t.id === id);
+    if (!title) return;
+    const newCh = Math.max(0, title.ch + delta);
+    
+    let newStatus = title.status;
+    if (newCh > title.ch && title.status === 'Planned') {
+      newStatus = 'Reading';
+    }
+
+    const { data, error } = await supabase.from('titles').update({ ch: newCh, status: newStatus, updated: Date.now() }).eq('id', id).select();
+    if (data) {
+      setTitles(prev => prev.map(t => t.id === id ? data[0] as Title : t));
+      if (newCh !== title.ch) {
+        addLog({
+          id: generateId(),
+          titleId: id,
+          title: title.title,
+          from: title.ch,
+          to: newCh,
+          delta: newCh - title.ch,
+          timestamp: Date.now()
+        });
       }
-      return t;
-    }));
+    }
   };
 
   const saveTitle = (titleData: Partial<Title>) => {
@@ -933,6 +973,7 @@ export default function App() {
       </nav>
 
       <TitleEditorModal />
+      <button onClick={() => supabase.auth.signOut()} className="fixed top-4 right-4 text-xs text-gray-400">Sign Out</button>
 
       {/* Toast Notification */}
       {toast && (
