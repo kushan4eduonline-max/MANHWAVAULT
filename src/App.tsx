@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Home, BarChart2, List as ListIcon, Globe, Download, Plus, Minus, ExternalLink, Search, X, Image as ImageIcon, Upload, Edit2, Trash2, Check, ArrowRight, Bookmark, Filter } from 'lucide-react';
+import { Home, BarChart2, List as ListIcon, Globe, Download, Plus, Minus, ExternalLink, Search, X, Image as ImageIcon, Upload, Edit2, Trash2, Check, ArrowRight, Bookmark, Filter, Sparkles } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { Auth } from './components/Auth';
 
@@ -21,6 +21,8 @@ export interface Title {
   fav: boolean;
   note: string;
   updated: number;
+  latest_chapter?: number;
+  preferred_source?: string;
 }
 
 export interface LogEntry {
@@ -38,6 +40,24 @@ export interface Site {
   name: string;
   url: string;
   type: string;
+}
+
+export interface ReadingSession {
+  id: string;
+  title_id: string;
+  chapter: number;
+  site: string;
+  opened_url: string;
+  created_at: string;
+}
+
+export interface Recommendation {
+  id: string;
+  title: string;
+  cover: string;
+  tags: string[];
+  source_title: string;
+  score: number;
 }
 
 // --- Hooks ---
@@ -111,8 +131,10 @@ function MainApp() {
   const [titles, setTitles] = useState<Title[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [readingSessions, setReadingSessions] = useState<ReadingSession[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   
-  const [currentTab, setCurrentTab] = useState<'home' | 'stats' | 'log' | 'sites' | 'import'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'stats' | 'log' | 'sites' | 'import' | 'recommendations'>('home');
   const [editingTitle, setEditingTitle] = useState<Partial<Title> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
@@ -123,9 +145,14 @@ function MainApp() {
       const { data: titlesData } = await supabase.from('titles').select('*');
       const { data: logsData } = await supabase.from('logs').select('*');
       const { data: sitesData } = await supabase.from('sites').select('*');
+      const { data: sessionsData } = await supabase.from('reading_sessions').select('*');
+      const { data: recsData } = await supabase.from('recommendations').select('*');
+
       if (titlesData) setTitles(titlesData as Title[]);
       if (logsData) setLogs(logsData as LogEntry[]);
       if (sitesData) setSites(sitesData as Site[]);
+      if (sessionsData) setReadingSessions(sessionsData as ReadingSession[]);
+      if (recsData) setRecommendations(recsData as Recommendation[]);
     };
     fetchData();
   }, []);
@@ -136,6 +163,22 @@ function MainApp() {
   };
 
   // --- Actions ---
+  const trackReadingSession = async (title: Title) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const session: Partial<ReadingSession> = {
+      title_id: title.id,
+      chapter: title.ch,
+      site: title.site,
+      opened_url: title.url,
+      created_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase.from('reading_sessions').insert({ ...session, user_id: user.id }).select();
+    if (data) setReadingSessions(prev => [data[0] as ReadingSession, ...prev]);
+  };
+
   const addLog = async (log: LogEntry) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -597,6 +640,7 @@ function MainApp() {
                     onClick={() => {
                       const link = t.url;
                       if (link) {
+                        trackReadingSession(t);
                         window.open(link, '_blank', 'noopener,noreferrer');
                       } else {
                         showToast('No URL saved for this title. Edit the title to add one.');
@@ -631,6 +675,51 @@ function MainApp() {
     const weeklyChapters = weeklyLogs.reduce((sum, l) => sum + l.delta, 0);
     const totalChapters = titles.reduce((sum, t) => sum + t.ch, 0);
 
+    // Reading Session Analytics
+    const today = new Date().toDateString();
+    const chaptersReadToday = readingSessions.filter(s => new Date(s.created_at).toDateString() === today).length;
+    
+    const oneWeekAgoDate = new Date();
+    oneWeekAgoDate.setDate(oneWeekAgoDate.getDate() - 7);
+    const chaptersReadThisWeek = readingSessions.filter(s => new Date(s.created_at) > oneWeekAgoDate).length;
+
+    const seriesReadCounts = readingSessions.reduce((acc, s) => {
+      acc[s.title_id] = (acc[s.title_id] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const mostReadSeriesId = Object.keys(seriesReadCounts).reduce((a, b) => seriesReadCounts[a] > seriesReadCounts[b] ? a : b, '');
+    const mostReadSeries = titles.find(t => t.id === mostReadSeriesId)?.title || 'N/A';
+
+    // Calculate average chapters per day (simple average over all days with activity)
+    const uniqueDays = new Set(readingSessions.map(s => new Date(s.created_at).toDateString())).size;
+    const avgChaptersPerDay = uniqueDays > 0 ? (readingSessions.length / uniqueDays).toFixed(1) : '0';
+
+    // Calculate streak
+    const sortedDates = Array.from(new Set(readingSessions.map(s => new Date(s.created_at).toDateString())))
+      .map(d => new Date(d).getTime())
+      .sort((a, b) => b - a);
+    
+    let streak = 0;
+    let currentDate = new Date().setHours(0,0,0,0);
+    // Check if read today
+    if (sortedDates.length > 0 && sortedDates[0] >= currentDate) {
+      streak = 1;
+      currentDate -= 86400000; // Move to yesterday
+    }
+    
+    for (const date of sortedDates) {
+       if (date === currentDate) { // If matches yesterday (or previous day in loop)
+         streak++;
+         currentDate -= 86400000;
+       } else if (date > currentDate) {
+         // Already counted (today)
+         continue;
+       } else {
+         break;
+       }
+    }
+
+
     const stats = {
       reading: titles.filter(t => t.status === 'Reading').length,
       completed: titles.filter(t => t.status === 'Completed').length,
@@ -643,7 +732,7 @@ function MainApp() {
       <div className="p-4 md:p-6 max-w-4xl mx-auto">
         <h1 className="font-serif font-bold text-2xl mb-6">Statistics</h1>
         
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
             <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Weekly Chapters</div>
             <div className="text-3xl font-mono text-mv-primary">{weeklyChapters}</div>
@@ -651,6 +740,25 @@ function MainApp() {
           <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
             <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Total Chapters</div>
             <div className="text-3xl font-mono text-mv-secondary">{totalChapters}</div>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
+            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Read Today</div>
+            <div className="text-3xl font-mono text-green-600">{chaptersReadToday}</div>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
+            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Current Streak</div>
+            <div className="text-3xl font-mono text-orange-500">{streak} days</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+           <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
+            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Most Read Series</div>
+            <div className="text-xl font-serif font-medium truncate" title={mostReadSeries}>{mostReadSeries}</div>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-black/10 shadow-sm">
+            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Avg. Chapters / Day</div>
+            <div className="text-xl font-mono font-medium">{avgChaptersPerDay}</div>
           </div>
         </div>
 
@@ -779,50 +887,133 @@ function MainApp() {
     );
   };
 
+  const RecommendationsPage = () => {
+    const [loading, setLoading] = useState(false);
+
+    const generateRecs = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-recommendations', {
+          body: { user_id: user.id }
+        });
+        if (error) throw error;
+        
+        // Refresh recs
+        const { data: recsData } = await supabase.from('recommendations').select('*');
+        if (recsData) setRecommendations(recsData as Recommendation[]);
+        showToast('Recommendations generated!');
+      } catch (e) {
+        console.error(e);
+        showToast('Failed to generate recommendations.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <div className="p-4 md:p-6 max-w-4xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="font-serif font-bold text-2xl">Recommendations</h1>
+          <button 
+            onClick={generateRecs} 
+            disabled={loading}
+            className="bg-mv-primary text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-mv-primary/90 disabled:opacity-50"
+          >
+            {loading ? 'Generating...' : 'Refresh Recommendations'}
+          </button>
+        </div>
+
+        {recommendations.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <p className="font-serif">No recommendations yet. Rate some titles 7+ to get started!</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {recommendations.map(rec => (
+              <div key={rec.id} className="bg-white border border-black/10 rounded-xl p-3 flex gap-3 shadow-sm">
+                 <div className="w-16 h-24 flex-shrink-0 rounded-md overflow-hidden bg-gray-100 flex items-center justify-center relative">
+                    {rec.cover ? (
+                      <img src={rec.cover} alt={rec.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-mv-primary font-serif font-bold text-xs">{getInitials(rec.title)}</span>
+                    )}
+                 </div>
+                 <div className="flex-1 min-w-0">
+                   <h3 className="font-serif font-semibold text-sm truncate">{rec.title}</h3>
+                   <p className="text-xs text-gray-500 mt-1">Because you liked: <span className="font-medium text-mv-primary">{rec.source_title}</span></p>
+                   <div className="flex flex-wrap gap-1 mt-2">
+                      {rec.tags?.slice(0, 3).map(tag => (
+                        <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-sm">{tag}</span>
+                      ))}
+                   </div>
+                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
   const ImportExportPage = () => {
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) {
+            showToast('You must be logged in to import data.');
+            return;
+          }
+
           const data = JSON.parse(event.target?.result as string);
           const importedTitles = Array.isArray(data) ? data : (data.titles || []);
           
-          let added = 0;
-          const newTitles = [...titles];
-
+          const toInsert: any[] = [];
+          
           importedTitles.forEach((item: any) => {
             const titleStr = item.title || item.name || '';
             if (!titleStr) return;
 
             // Check duplicate
-            const exists = newTitles.find(t => t.title.toLowerCase() === titleStr.toLowerCase());
+            const exists = titles.find(t => t.title.toLowerCase() === titleStr.toLowerCase());
             if (!exists) {
-              newTitles.push({
-                id: item.id || generateId(),
-                title: titleStr,
-                type: item.type || 'Manhwa',
-                status: item.status || 'Reading',
-                ch: parseInt(item.ch || item.chapter || '0', 10) || 0,
-                total: parseInt(item.total || '0', 10) || 0,
-                cover: item.cover || item.image || item.coverUrl || item.imageUrl || item.thumbnail || item.thumb || item.picture || '',
-                url: item.url || item.link || item.siteUrl || item.source || item.href || item.readUrl || item.lastReadUrl || '',
-                site: item.site || '',
-                rating: item.rating || 0,
-                tags: Array.isArray(item.tags) ? item.tags : [],
-                fav: !!item.fav,
-                note: item.note || '',
-                updated: item.updated || Date.now()
-              });
-              added++;
+               toInsert.push({
+                 user_id: user.id,
+                 title: titleStr,
+                 type: item.type || 'Manhwa',
+                 status: item.status || 'Reading',
+                 ch: parseInt(item.ch || item.chapter || '0', 10) || 0,
+                 total: parseInt(item.total || '0', 10) || 0,
+                 cover: item.cover || item.image || item.coverUrl || item.imageUrl || item.thumbnail || item.thumb || item.picture || '',
+                 url: item.url || item.link || item.siteUrl || item.source || item.href || item.readUrl || item.lastReadUrl || '',
+                 site: item.site || '',
+                 rating: item.rating || 0,
+                 tags: Array.isArray(item.tags) ? item.tags : [],
+                 fav: !!item.fav,
+                 note: item.note || '',
+                 updated: item.updated || Date.now()
+               });
             }
           });
 
-          setTitles(newTitles);
-          showToast(`Successfully imported ${added} new titles.`);
+          if (toInsert.length > 0) {
+            const { data, error } = await supabase.from('titles').insert(toInsert).select();
+            if (error) throw error;
+            if (data) {
+              setTitles(prev => [...data as Title[], ...prev]);
+              showToast(`Successfully imported ${data.length} new titles.`);
+            }
+          } else {
+            showToast('No new titles found to import.');
+          }
         } catch (err) {
-          showToast("Invalid JSON file.");
+          console.error(err);
+          showToast("Failed to import titles.");
         }
       };
       reader.readAsText(file);
@@ -844,12 +1035,23 @@ function MainApp() {
     const handleClearData = () => {
       setConfirmDialog({
         title: 'Clear All Data',
-        message: 'WARNING: This will permanently delete ALL your titles, reading logs, and saved sites. This action cannot be undone. Are you absolutely sure?',
-        onConfirm: () => {
-          setTitles([]);
-          setLogs([]);
-          setSites([]);
-          showToast('All data has been cleared.');
+        message: 'WARNING: This will permanently delete ALL your titles, reading logs, and saved sites from the database. This action cannot be undone. Are you absolutely sure?',
+        onConfirm: async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { error: tErr } = await supabase.from('titles').delete().eq('user_id', user.id);
+          const { error: lErr } = await supabase.from('logs').delete().eq('user_id', user.id);
+          const { error: sErr } = await supabase.from('sites').delete().eq('user_id', user.id);
+          
+          if (!tErr && !lErr && !sErr) {
+            setTitles([]);
+            setLogs([]);
+            setSites([]);
+            showToast('All data has been cleared from database.');
+          } else {
+            showToast('Failed to clear some data.');
+          }
         }
       });
     };
@@ -912,6 +1114,7 @@ function MainApp() {
           {[
             { id: 'home', icon: Home, label: 'Library' },
             { id: 'stats', icon: BarChart2, label: 'Statistics' },
+            { id: 'recommendations', icon: Sparkles, label: 'For You' },
             { id: 'log', icon: ListIcon, label: 'Reading Log' },
             { id: 'sites', icon: Globe, label: 'Saved Sites' },
             { id: 'import', icon: Download, label: 'Data' },
@@ -948,6 +1151,7 @@ function MainApp() {
 
         {currentTab === 'home' && <HomePage />}
         {currentTab === 'stats' && <StatsPage />}
+        {currentTab === 'recommendations' && <RecommendationsPage />}
         {currentTab === 'log' && <LogPage />}
         {currentTab === 'sites' && <SitesPage />}
         {currentTab === 'import' && <ImportExportPage />}
@@ -958,6 +1162,7 @@ function MainApp() {
         {[
           { id: 'home', icon: Home, label: 'Home' },
           { id: 'stats', icon: BarChart2, label: 'Stats' },
+          { id: 'recommendations', icon: Sparkles, label: 'For You' },
           { id: 'log', icon: ListIcon, label: 'Log' },
           { id: 'sites', icon: Globe, label: 'Sites' },
           { id: 'import', icon: Download, label: 'Data' },
