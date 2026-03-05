@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;0,7..72,700;1,7..72,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-mv-bg: #f5f3ef;
+  --color-mv-card: #ffffff;
+  --color-mv-primary: #0d6e6e;
+  --color-mv-secondary: #c47d0e;
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Literata", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+body {
+  background-color: var(--color-mv-bg);
+  color: #1a1a1a;
+  font-family: var(--font-sans);
+}
